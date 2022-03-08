@@ -1,7 +1,3 @@
-![Header](../../actions/workflows/py-header.yml/badge.svg)
-![Lint](../../actions/workflows/py-lint.yml/badge.svg)
-![Format](../../actions/workflows/py-format.yml/badge.svg)
-
 # Pig - A Die Game
 
 The objectives of this exercise are:
