@@ -4,6 +4,7 @@ import cProfile
 
 def collatz(n, d):
   og_n = n
+
   counter = 1
   if d.get(n, False):
     return d[n]
@@ -36,4 +37,3 @@ def main():
   print(f'{special_n} {max_count}')
 
 cProfile.run('main()')
-main()

@@ -16,13 +16,26 @@
 from time import sleep
 
 
+class BankruptExecution(Exception):
+    """Player does not have sufficient funds"""
+
+    def __init__(self, target, message=" has insufficient funds"):
+        super().__init__(message)
+        self._target = target
+        self._message = message
+
+    def __str__(self):
+        """returns the error message to the player"""
+        return self._target + self._message
+
+
 class Writer:
     """Writer Class"""
 
     def __init__(self, speed=0.0):
         self._speed = speed
 
-    def slow(self, stream="", key='\n'):
+    def slow(self, stream="", key="\n"):
         """simulates a typewriter effect"""
         for text in str(stream):
             sleep(self._speed)

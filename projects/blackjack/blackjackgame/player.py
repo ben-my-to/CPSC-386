@@ -15,7 +15,7 @@
 
 from collections import namedtuple
 from enum import Enum, Flag, auto
-from .util import Writer
+from .util import Writer, BankruptExecution
 
 
 Hand = namedtuple("Hand", ["card", "bet", "state"])
@@ -38,7 +38,7 @@ class PlayerState(Flag):
     DOUBLE = auto()
 
 
-class Player():
+class Player:
     """A Player Class"""
 
     write = Writer().slow
@@ -46,7 +46,7 @@ class Player():
     def __init__(self, name, game=None, bank=10000.0):
         self._name = name
         self._game = game
-        self._bank = [bank, None]
+        self._bank = [bank, 0]
         self._state = PlayerState.NULL
 
         self._active = 0
@@ -95,7 +95,7 @@ class Player():
     def pstate(self):
         """returns a reference of the player's hand state"""
         return self._state
-    
+
     @pstate.setter
     def pstate(self, value=None):
         """sets the value of the player's state"""
@@ -127,14 +127,13 @@ class Player():
         return self._bank[1]
 
     @insurance.setter
-    def buy_insurance(self, value=None):
+    def insurance(self, value=0):
         """adds an additional bet as insurance"""
         self._bank[1] = value
 
     def empty_hand(self):
         """resets a player's state"""
-        self._active = 0
-        self._bank[1] = None
+        self._active, self._bank[1] = 0, 0
         self._state = PlayerState.NULL
         self._hand = [Hand([], bet=None, state=None)]
 
@@ -165,8 +164,10 @@ class Player():
 
     def has_blackjack(self):
         """returns true of the player has 21 given an Ace and a rank 10"""
-        return len(self.curr.card) == 2 and \
-            set(map(int, self.curr.card)) == {11, 10}
+        return len(self.curr.card) == 2 and set(map(int, self.curr.card)) == {
+            11,
+            10,
+        }
 
     def has_insurance(self):
         """returns true if the player took insurance"""
@@ -250,20 +251,17 @@ class Dealer(Player):
                     player.hstate = HandState.PUSH
 
                 if player.hstate == HandState.WIN:
-                    self.write("[INITIAL BET]")
                     self.make_pay(player)
                 elif player.hstate == HandState.BUST:
-                    self.write("[INITIAL BET]")
                     self.make_charge(player)
                 elif player.hstate == HandState.PUSH:
                     self.write(f"{player.name} got pushed")
 
                 if PlayerState.INSURANCE in player.pstate:
-                    self.write("[INSURANCE]")
                     if self.has_blackjack():
-                        self.make_pay(player)
+                        self.make_pay(player, key="side")
                     else:
-                        self.make_charge(player)
+                        self.make_charge(player, key="side")
 
                 if player.bank <= 0:
                     player.bank = 10000.0
@@ -272,15 +270,17 @@ class Dealer(Player):
         self.empty_hand()
         self.write()
 
-    def make_pay(self, player):
-        """pays the winning player double their wager"""
-        self.write(f"{player.name} earned ${player.bet * 2.0}")
-        player.bank += player.bet * 2.0
+    def make_pay(self, player, key="initial"):
+        """pays the winning player 2-to-1 for wager"""
+        money = player.insurance if key == "side" else player.bet
+        self.write(f"{player.name} earned ${money * 2.0} on their {key}-bet")
+        player.bank += money
 
-    def make_charge(self, player):
+    def make_charge(self, player, key="initial"):
         """subtracts the lossing player's wager"""
-        self.write(f"{player.name} lost ${player.bet}")
-        player.bank -= player.bet
+        money = player.insurance if key == "side" else player.bet
+        self.write(f"{player.name} lost ${money} on their {key}-bet")
+        player.bank -= money
 
     def offer_insurance(self, player):
         """asks the player if they want insurance"""
@@ -289,7 +289,9 @@ class Dealer(Player):
             raise AttributeError("Invalid Input")
         if answer == "Y":
             side_bet = self._game.ask_bet(player)
-            if side_bet < 1 or side_bet > player.bank - player.bet:
-                self.write(f"{player.name} has insufficient funds")
-            else:
-                player.buy_insurance = side_bet
+            try:
+                if side_bet < 1 or side_bet > player.bank - player.bet:
+                    raise BankruptExecution(player.name)
+                player.insurance = side_bet
+            except BankruptExecution as inst:
+                self.write(str(inst))
