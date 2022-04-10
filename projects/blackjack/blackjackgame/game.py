@@ -15,7 +15,7 @@
 
 import pickle
 from .cards import Deck
-from .player import Player, Dealer, PlayerState
+from .player import Player, Dealer, PlayerState, HandState
 from .util import Writer, BankruptExecution
 
 
@@ -28,7 +28,6 @@ class BlackJack:
         self._players = [Dealer(self)]
         self._deck = Deck() * 8
         self._turn = 0
-        self._loaded = False
 
     def __contains__(self, name):
         """check if name already exists in player list"""
@@ -64,22 +63,30 @@ class BlackJack:
     def save_game(self):
         """self.write the list players to the file"""
         player_list = self._players
-        with open("save.bj", "wb") as file_handle:
+        with open("saved_game.bj", "wb") as file_handle:
             pickle.dump(player_list, file_handle, pickle.HIGHEST_PROTOCOL)
 
     def load_game(self):
         """read the contents of save.db, decode it, and return it as players"""
         try:
-            with open("save.bj", "rb") as file_handle:
+            with open("saved_game.bj", "rb") as file_handle:
                 self._players = pickle.load(file_handle)
-            self._loaded = True
         except FileNotFoundError:
-            self.write("Could Not Load Game-Data")
+            self.write("No Saved-Game File Detected\n")
+            return False
+        return True
 
     def display(self, player):
         """outputs all necessary information on a player's turn"""
         self.write(f"\n----------{player.name}'s Turn----------")
         self.write(str(self))
+
+    def start_game(self):
+        """establishes all player's initial bets prior to any action"""
+        self._players[-1].shuffle()
+        self._players[-1].cut()
+        if not self.load_game():
+            self.acquire_players()
 
     def acquire_players(self):
         """retreives a list of players for the game"""
@@ -88,26 +95,29 @@ class BlackJack:
             raise ValueError("Invalid Number of Players")
 
         for player in range(num):
-            pid = input(
-                self.write(f"Enter Player #{player + 1}'s Name: ", key="")
-            )
-            while pid in self:
-                pid = input(
-                    self.write(
-                        f"The name '{pid}' already exists, "
-                        "please choose a different name: ",
-                        key="",
-                    )
-                )
-            self._players.insert(len(self) - 1, Player(pid, self))
+            name = self.request_name(player)
+            self._players.insert(len(self) - 1, Player(name, self))
 
-    def ask_bet(self, player):
+    def request_name(self, player):
+        """prompts players for unique names"""
+        name = f"Enter Player #{player + 1}'s Name: "
+        error = "The name already exists, please choose a different name"
+        while True:
+            try:
+                if (pid := input(self.write(name, key=""))) in self:
+                    raise NameError
+                return pid
+            except NameError:
+                self.write(error, key="\n")
+
+    def ask_bet(self, player, arg=None):
         """prompts the player for their wager"""
+        if arg is None:
+            arg = round(player.bank, 2)
         cash = float(
             input(
                 self.write(
-                    f"{player.name}, how much do you "
-                    f"want to bet [${round(player.bank, 2)}]: ",
+                    f"{player.name}, how much do you want to bet [${arg}]: ",
                     key="",
                 )
             )
@@ -117,82 +127,91 @@ class BlackJack:
             raise ValueError("Invalid Bet")
         return cash
 
-    def check_balance(self, player):
+    def check_balance(self, player, valid=False):
         """checks if there is sufficient funds to double a player's wager"""
         try:
             if player.bank < player.bet * 2:
                 raise BankruptExecution(player.name)
-            return True
+            valid = True
         except BankruptExecution as inst:
             self.write(str(inst))
-            return False
+        return valid
 
-    # def ask_split(self, player):
-    #     """prompts the player if they want to split their hand"""
-    #     if self.check_balance():
-    #         choice = input(self.write('Split Hand? (Y/N): ', key="")).upper()
-    #         if choice == "Y":
-    #             bet = self.ask_bet(player)
-    #             player.will_split(bet)
+    def offer_double_down(self, player):
+        """prompts the player if they want to double-down"""
+        self.write(f"Hand #{player.active + 1} - ", key="")
+        answer = input(self.write("Double-Down? (Y/N): ", key="")).upper()
+        if answer not in ["Y", "N"]:
+            raise AttributeError("Invalid Input")
+        if answer == "Y":
+            if self.check_balance(player):
+                return player.will_double_down()
+        return False
 
-    # def ask_double_down(self, player):
-    #     """prompts the player if they want to double-down"""
-    #     if self.check_balance():
-    #         choice = input(self.write('Double-Down? (Y/N): ', key="")).upper()
-    #         if choice == "Y":
-    #             player.will_double_down()
-    #     return choice == "Y"
+    def ask_split(self, player):
+        """prompts the player if they want to split their hand"""
+
+        answer = input(self.write("Split-Hand? (Y/N): ", key="")).upper()
+        if answer not in ["Y", "N"]:
+            raise AttributeError("Invalid Input")
+        if answer == "Y":
+            if self.check_balance(player):
+                player.will_split()
+                return True
+        return False
 
     def ask_choice(self, player, dealer):
         """prompts the player for their legal moves"""
+        self.display(player)
+        player.times += 1
+
+        if player.has_blackjack():
+            self.write(f"\n{player.name} got BlackJack!")
+
         if int(dealer.curr.card[0]) >= 10 and not player.has_insurance():
             player.pstate |= PlayerState.INSURANCE
             dealer.offer_insurance(player)
 
-        # did_double = False
-        # if len(player.curr.card) == 2:
-        #    did_double = self.ask_double_down(player)
-        #    if player.equal_hand():
-        #        self.ask_split(player)
-        #
-        # if did_double:
-        #     return "D"
+        if player.times == 1 and player.has_equal_hand():
+            if self.ask_split(player):
+                player.pstate |= PlayerState.SPLIT
 
-        if player.has_blackjack():
-            self.write(f"\n{player.name} got BlackJack!")
-            choice = "S"
-        else:
-            choice = input(self.write("\n(H)it or (S)tand: ", key="")).upper()
+        if player.times == 1:
+            if self.offer_double_down(player):
+                player.hstate |= HandState.DOUBLE
+                return True
+            return False
 
-        if choice not in ["H", "S"]:
-            raise AttributeError("Invalid Move")
-        return choice
+        if not player.has_blackjack():
+            self.write(f"Hand #{player.active + 1} - ", key="")
+            choice = input(self.write("(H)it or (S)tand: ", key="")).upper()
 
-    def action(self, player, state):
-        """lists the possible actions taken by a player"""
-        forward = False
+            if choice not in ["H", "S"]:
+                raise AttributeError("Invalid Move")
+            if choice == "H":
+                return player.will_hit(self._deck.deal()[0])
+        return True
 
-        if state == "H":
-            player.will_hit(self._deck.deal()[0])
-            if player.is_busted():
-                forward = True
-        else:
-            forward = True
-
-        return forward
-
-    def start_game(self):
-        """establishes all player's initial bets prior to any action"""
-        self.load_game()
-
-        if self._deck.needs_shuffling():
-            self._deck = Deck() * 8
-        self._players[-1].shuffle()
-        self._players[-1].cut()
+    def ask_multiple_choices(self, player, dealer, start):
+        """prompts the player for their legal moves given they splitted"""
+        for key in range(start, len(player.hand)):
+            player.active = key
+            while True:
+                advance = self.ask_choice(player, dealer)
+                if advance:
+                    break
+        return advance
 
     def end_game(self):
         """determines which player want to keep playing"""
+        self.save_game()
+        self._deck = Deck() * 8
+        self._players[-1].shuffle()
+        self._players[-1].cut()
+
+        first_player = self._players[0]
         hold = [self._players[-1]]
+
         for player in self._players[:-1]:
             answer = input(
                 self.write(f"{player.name}, continue playing? (y/n) ", key="")
@@ -203,34 +222,33 @@ class BlackJack:
             if answer == "Y":
                 hold.append(player)
 
-        self._turn = 0
         self._players = [player for player in self._players if player in hold]
+        return first_player not in self._players
 
     def run(self):
         """starts the game"""
         self.start_game()
-        if not self._loaded:
-            self.acquire_players()
 
-        while len(self._players) > 1:
-            player, dealer = self._players[0], self._players[-1]
+        player, dealer = self._players[0], self._players[-1]
+        while True:
+            if self._deck.needs_shuffling():
+                if self.end_game():
+                    break
 
             for current in self._players[:-1]:
                 current.bet = self.ask_bet(current)
+
             self.write()
             dealer.will_deal()
 
             while player is not dealer:
-                self.display(player)
+                advance = self.ask_choice(player, dealer)
 
-                signal = False
-                num_of_hands = len(player.hand)
-                for key in range(0, num_of_hands):
-                    player.active = key
-                    choice = self.ask_choice(player, dealer)
-                    signal = self.action(player, choice)
-                    num_of_hands = len(player.hand)
-                if signal:
+                if player.has_split():
+                    start = 1 if player.has_doubled_down() else 0
+                    advance = self.ask_multiple_choices(player, dealer, start)
+
+                if advance:
                     player = self.__next__()
 
             self.write(f"\n----------{player.name}'s Turn----------")
@@ -239,6 +257,4 @@ class BlackJack:
 
             player.will_hit()
             player.evaluate()
-
-            self.save_game()
-            self.end_game()
+            player = self.__next__()

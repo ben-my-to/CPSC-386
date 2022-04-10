@@ -32,7 +32,7 @@ class BankruptExecution(Exception):
 class Writer:
     """Writer Class"""
 
-    def __init__(self, speed=0.0):
+    def __init__(self, speed=0.15):
         self._speed = speed
 
     def slow(self, stream="", key="\n"):
