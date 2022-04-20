@@ -43,9 +43,6 @@ class Circle:
                ay_min >= by_min and ay_min <= by_max and \
                ay_max >= by_min and ay_max <= by_max
 
-        #return all(l[0] > l[1] if pos % 2 else l[0] < l[1] \
-        #           for pos, l in enumerate(zip(self.bound, field.bound)))
-
 
     def has_collided(self, field=None):
         vec = self.center - field.center
@@ -59,11 +56,15 @@ class Circle:
 
 def main():
     pygame.display.init()
-    pygame.display.set_mode(size=(800, 800))
-    pygame.display.set_caption('Hello World')
+    window = pygame.display.set_mode(size=(800, 800))
+    pygame.display.set_caption('Bouncing Balls')
 
-    a = Circle(10.0, 5.0, radius=5.0, velocity=2.0)
-    b = Circle(20.0, 5.0, radius=10.0, velocity=2.0)
+
+    a = Circle(400.0, 400.0, radius=100.0, velocity=2.0)
+    b = Circle(600.0, 300.0, radius=100.0, velocity=2.0)
+
+    pygame.draw.circle(window, (100, 50, 205), a.center, a.radius)
+    pygame.draw.circle(window, (100, 50, 205), b.center, b.radius)
 
     print(a.is_interior(b))
     print(a.has_collided(b))
