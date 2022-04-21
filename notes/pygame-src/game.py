@@ -2,7 +2,6 @@
 
 
 import pygame
-from itertools import product
 from math import isclose
 
 
@@ -14,7 +13,7 @@ class Circle:
 
     @property
     def center(self):
-        return self._center
+        return (self._center.x, self._center.y)
 
     @property
     def radius(self):
@@ -55,22 +54,26 @@ class Circle:
 
 
 def main():
-    pygame.display.init()
-    window = pygame.display.set_mode(size=(800, 800))
+    pygame.init()
+    screen = pygame.display.set_mode((800, 800))
     pygame.display.set_caption('Bouncing Balls')
-
+    white = (255, 255, 255)
 
     a = Circle(400.0, 400.0, radius=100.0, velocity=2.0)
     b = Circle(600.0, 300.0, radius=100.0, velocity=2.0)
 
-    pygame.draw.circle(window, (100, 50, 205), a.center, a.radius)
-    pygame.draw.circle(window, (100, 50, 205), b.center, b.radius)
+    pygame.draw.circle(screen, white, a.center, a.radius)
+    pygame.draw.circle(screen, white, b.center, b.radius)
 
-    print(a.is_interior(b))
-    print(a.has_collided(b))
-    print(isclose(0.2 * 3, 0.6))
 
-    pygame.display.quit()
+    pygame.display.update()
+    pygame.time.wait(3000)
+
+    pygame.quit()
+
+    #print(a.is_interior(b))
+    #print(a.has_collided(b))
+    #print(isclose(0.2 * 3, 0.6))
 
 
 if __name__ == '__main__':
